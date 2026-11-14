@@ -1,42 +1,136 @@
-// Module 02 Assignment 2: Star Wars app
+// Module 03 Assignment 2: Star Wars API
 // Three screens: Planets, Films, Spaceships.
+// Each screen fetches a list from the Star Wars API (SWAPI) and shows it in a FlatList.
 // iOS uses bottom tab navigation, Android uses drawer navigation.
 
 import "react-native-gesture-handler";
-import React from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createDrawerNavigator } from "@react-navigation/drawer";
 import { Ionicons } from "@expo/vector-icons";
 
+// ---------- API ----------
+
+// Main SWAPI address and a mirror (used if the main one does not answer)
+const API_URLS = ["https://swapi.dev/api/", "https://swapi.py4e.com/api/"];
+
+// Fetch one resource (planets, starships or films).
+// Tries the main API first, then the mirror.
+async function fetchResource(resource) {
+  for (const base of API_URLS) {
+    try {
+      const response = await fetch(base + resource + "/");
+      if (!response.ok) {
+        throw new Error("Bad response: " + response.status);
+      }
+      const json = await response.json();
+      return json.results; // the list is inside "results"
+    } catch (error) {
+      console.log("Fetch failed for " + base + ":", error.message);
+    }
+  }
+  throw new Error("Could not load data from the Star Wars API.");
+}
+
+// Custom hook: loads a list and keeps loading and error state
+function useSwapiList(resource) {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetchResource(resource)
+      .then((results) => setData(results))
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [resource]);
+
+  return { data, loading, error };
+}
+
+// ---------- Reusable list screen ----------
+
+// Shows a loading spinner, an error, or the list of items.
+// renderDetails returns the second line of text for each item.
+function SwapiListScreen({ resource, titleKey, renderDetails }) {
+  const { data, loading, error } = useSwapiList(resource);
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#FFE81F" />
+        <Text style={styles.info}>Loading {resource}...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.error}>{error}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <FlatList
+      style={styles.list}
+      data={data}
+      keyExtractor={(item) => item.url} // every SWAPI item has a unique url
+      renderItem={({ item }) => (
+        <View style={styles.item}>
+          <Text style={styles.itemTitle}>{item[titleKey]}</Text>
+          <Text style={styles.itemDetails}>{renderDetails(item)}</Text>
+        </View>
+      )}
+    />
+  );
+}
+
 // ---------- Screens ----------
 
-// Planets screen: for now it only shows its name
+// Planets screen: data from SWAPI Planets
 function PlanetsScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Planets</Text>
-    </View>
+    <SwapiListScreen
+      resource="planets"
+      titleKey="name"
+      renderDetails={(p) => `Climate: ${p.climate} | Population: ${p.population}`}
+    />
   );
 }
 
-// Films screen: for now it only shows its name
+// Films screen: data from SWAPI Films
 function FilmsScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Films</Text>
-    </View>
+    <SwapiListScreen
+      resource="films"
+      titleKey="title"
+      renderDetails={(f) =>
+        `Episode ${f.episode_id} | Director: ${f.director} | Released: ${f.release_date}`
+      }
+    />
   );
 }
 
-// Spaceships screen: for now it only shows its name
+// Spaceships screen: data from SWAPI Starships
 function SpaceshipsScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Spaceships</Text>
-    </View>
+    <SwapiListScreen
+      resource="starships"
+      titleKey="name"
+      renderDetails={(s) => `Model: ${s.model} | Class: ${s.starship_class}`}
+    />
   );
 }
 
@@ -111,17 +205,42 @@ export default function App() {
 // ---------- Styles ----------
 
 const styles = StyleSheet.create({
-  // Screen container: fills the screen and centers content with Flexbox
-  container: {
+  // Centered container for loading and error states
+  center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#111",
+    padding: 20,
   },
-  // Screen name text
-  title: {
-    fontSize: 28,
+  // The list fills the screen
+  list: {
+    flex: 1,
+    backgroundColor: "#111",
+  },
+  // One row in the list
+  item: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
+  },
+  itemTitle: {
+    fontSize: 18,
     fontWeight: "bold",
     color: "#FFE81F",
+  },
+  itemDetails: {
+    fontSize: 14,
+    color: "#ccc",
+    marginTop: 4,
+  },
+  info: {
+    color: "#ccc",
+    marginTop: 10,
+  },
+  error: {
+    color: "#ff6b6b",
+    fontSize: 16,
+    textAlign: "center",
   },
 });
